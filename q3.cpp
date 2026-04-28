@@ -1,20 +1,15 @@
-// q3.cpp
-// Q3: Three threads. runMeFirst -> runMeSecond -> runMeThird, enforced
-// with two semaphores.
-//
+// q3.cpp - Q3
+// runMeFirst, then runMeSecond, then runMeThird, with two semaphores
 
 #include <iostream>
 #include <thread>
 #include <semaphore.h>
 #include <fcntl.h>
-#include <sys/stat.h>
 
 using namespace std;
 
-const char* SEM1_NAME = "/q3_sem1";
-const char* SEM2_NAME = "/q3_sem2";
-sem_t* sem1;   // signaled by runMeFirst, awaited by runMeSecond
-sem_t* sem2;   // signaled by runMeSecond, awaited by runMeThird
+sem_t* sem1;
+sem_t* sem2;
 
 void runMeFirst() {
     cout << "Run me first" << endl;
@@ -33,13 +28,10 @@ void runMeThird() {
 }
 
 int main() {
-    sem_unlink(SEM1_NAME);
-    sem_unlink(SEM2_NAME);
-    sem1 = sem_open(SEM1_NAME, O_CREAT, 0644, 0);
-    sem2 = sem_open(SEM2_NAME, O_CREAT, 0644, 0);
+    // both start at 0
+    sem1 = sem_open("/q3_sem1", O_CREAT, 0644, 0);
+    sem2 = sem_open("/q3_sem2", O_CREAT, 0644, 0);
 
-    // Launch in reverse order so the semaphores – not OS scheduling –
-    // are clearly what enforces the sequence.
     thread t3(runMeThird);
     thread t2(runMeSecond);
     thread t1(runMeFirst);
@@ -48,9 +40,5 @@ int main() {
     t2.join();
     t3.join();
 
-    sem_close(sem1);
-    sem_close(sem2);
-    sem_unlink(SEM1_NAME);
-    sem_unlink(SEM2_NAME);
     return 0;
 }

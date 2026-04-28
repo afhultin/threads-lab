@@ -1,8 +1,5 @@
 // webserver.cpp - Q4
-// Fake web server done as producer/consumer.
-// One listen() thread makes requests every 1-3 seconds and shoves them
-// onto msg_queue. A few do_request() threads pop them off and print
-// what they served.
+// producer-consumer web server simulation
 
 #include <iostream>
 #include <thread>
@@ -12,92 +9,90 @@
 #include <string>
 #include <vector>
 #include <chrono>
-#include <random>
+#include <cstdlib>
+#include <ctime>
 
 using namespace std;
 
 struct requestStructure {
-    int    request_id;
+    int request_id;
     string ip_address;
     string page_requested;
 };
 
 queue<requestStructure> msg_queue;
-mutex                   queue_mutex;   
-mutex                   print_mutex;   
-condition_variable      cv;
+mutex queue_mtx;
+mutex print_mtx;
+condition_variable cv;
 
-string webPages[10] = {
-    "google.com",  "yahoo.com",     "facebook.com", "twitter.com",
-    "amazon.com",  "youtube.com",   "wikipedia.org", "reddit.com",
-    "github.com",  "stackoverflow.com"
-};
+string webPages[10] = {"google.com", "yahoo.com", "facebook.com", "twitter.com",
+    "amazon.com", "youtube.com", "wikipedia.org", "reddit.com",
+    "github.com", "stackoverflow.com"};
 
-int  request_counter = 0;
-bool producer_done   = false;
-
-const int TOTAL_REQUESTS = 20;   // how many requests the producer makes
-const int NUM_CONSUMERS  = 4;    // n consumer threads
+int request_counter = 0;
+bool done_flag = false;
 
 void listen() {
-    random_device rd;
-    mt19937 gen(rd());
-    uniform_int_distribution<int> sleep_dist(1, 3);
-    uniform_int_distribution<int> page_dist(0, 9);
-
-    for (int i = 0; i < TOTAL_REQUESTS; ++i) {
-        this_thread::sleep_for(chrono::seconds(sleep_dist(gen)));
+    for (int i = 0; i < 20; i++) {
+        // sleep 1-3 sec
+        int sleepTime = rand() % 3 + 1;
+        this_thread::sleep_for(chrono::seconds(sleepTime));
 
         requestStructure req;
-        req.ip_address     = "";
-        req.page_requested = webPages[page_dist(gen)];
+        req.ip_address = "";
+        req.page_requested = webPages[rand() % 10];
 
-        {
-            lock_guard<mutex> g(queue_mutex);
-            req.request_id = ++request_counter;
-            msg_queue.push(req);
-        }
-        cv.notify_one();   // wake one consumer
+        queue_mtx.lock();
+        request_counter++;
+        req.request_id = request_counter;
+        msg_queue.push(req);
+        queue_mtx.unlock();
+
+        cv.notify_one();
     }
 
-    // Tell consumers no more work is coming.
-    {
-        lock_guard<mutex> g(queue_mutex);
-        producer_done = true;
-    }
+    // done sending requests
+    queue_mtx.lock();
+    done_flag = true;
+    queue_mtx.unlock();
     cv.notify_all();
 }
 
 void do_request(int thread_id) {
     while (true) {
-        unique_lock<mutex> lk(queue_mutex);
-        cv.wait(lk, [] { return !msg_queue.empty() || producer_done; });
+        unique_lock<mutex> lk(queue_mtx);
+        // wait if queue is empty
+        while (msg_queue.empty() && !done_flag) {
+            cv.wait(lk);
+        }
 
-        if (msg_queue.empty() && producer_done) return;
+        if (msg_queue.empty() && done_flag) return;
 
         requestStructure req = msg_queue.front();
         msg_queue.pop();
         lk.unlock();
 
-        {
-            lock_guard<mutex> p(print_mutex);
-            cout << "thread " << thread_id
-                 << " completed request " << req.request_id
-                 << " requesting webpage " << req.page_requested
-                 << endl;
-        }
+        print_mtx.lock();
+        cout << "thread " << thread_id << " completed request " << req.request_id
+             << " requesting webpage " << req.page_requested << endl;
+        print_mtx.unlock();
     }
 }
 
 int main() {
+    srand(time(NULL));
+
     thread producer(listen);
 
     vector<thread> consumers;
-    for (int i = 0; i < NUM_CONSUMERS; ++i)
-        consumers.emplace_back(do_request, i + 1);
+    for (int i = 0; i < 4; i++) {
+        consumers.push_back(thread(do_request, i + 1));
+    }
 
     producer.join();
-    for (auto& t : consumers) t.join();
+    for (int i = 0; i < consumers.size(); i++) {
+        consumers[i].join();
+    }
 
     return 0;
 }

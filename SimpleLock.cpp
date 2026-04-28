@@ -1,7 +1,4 @@
-// SimpleLock.cpp
-// Q1: Two functions f1 (+10) and f2 (-5)
-// Four threads run: 2 on f1 and 2 on f2. 
-// Initial balance = 200.  Expected final balance = 200 + 10 + 10 - 5 - 5 = 210.
+// SimpleLock.cpp - Q1
 
 #include <iostream>
 #include <thread>
@@ -10,18 +7,20 @@
 using namespace std;
 
 int balance = 200;
-mutex lock_balance;
+mutex mtx;
 
+// add 10
 void f1() {
-    lock_balance.lock();
+    mtx.lock();
     balance += 10;
-    lock_balance.unlock();
+    mtx.unlock();
 }
 
+// subtract 5
 void f2() {
-    lock_balance.lock();
+    mtx.lock();
     balance -= 5;
-    lock_balance.unlock();
+    mtx.unlock();
 }
 
 int main() {
